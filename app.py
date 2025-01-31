@@ -1,9 +1,8 @@
 import streamlit as st
 import spacy
-import random
 import nltk
-from nltk.corpus import wordnet
 from textblob import TextBlob
+from language_tool_python import LanguageTool
 import re
 
 # --- Initialization ---
@@ -19,6 +18,8 @@ try:
 except:
     nltk.download('wordnet')
 
+tool = LanguageTool('en-US')  # Grammar checker
+
 # --- Enhanced Replacement Rules ---
 SIMPLIFY_DICT = {
     "technology": "tech",
@@ -28,93 +29,103 @@ SIMPLIFY_DICT = {
     "environment": "nature",
     "global community": "worldwide friends",
     "significant": "important",
-    "revolutionized": "changed completely"
+    "revolutionized": "changed completely",
+    "methodologies": "ways",
+    "contemporary": "modern"
 }
 
 def simplify_text(text):
-    """Improved simplification with grammatical safeguards"""
+    """Robust text simplification pipeline"""
     try:
-        # Stage 1: Initial cleaning
-        text = re.sub(r'\s+', ' ', str(text)).strip()
+        # Stage 1: Text normalization
+        text = re.sub(r'\W+', ' ', str(text)).strip()
+        text = re.sub(r'\s+', ' ', text)
         
         # Stage 2: Grammar correction
-        corrected = str(TextBlob(text).correct())
+        matches = tool.check(text)
+        corrected = tool.correct(text)
         
         # Stage 3: Context-aware processing
         doc = nlp(corrected)
         simplified = []
         
         for token in doc:
-            # Handle special cases first
-            if token.text.lower() in ["ai", "llm"]:
-                simplified.append("smart computer system")
-            elif token.text.lower() in SIMPLIFY_DICT:
-                simplified.append(SIMPLIFY_DICT[token.text.lower()])
-            else:
-                # Get age-appropriate synonyms
-                simple_word = get_simple_word(token)
-                simplified.append(simple_word)
+            # Preserve proper nouns and entities
+            if token.ent_type_ or token.is_punct:
+                simplified.append(token.text)
+                continue
+            
+            # Use simple dictionary
+            simple_word = SIMPLIFY_DICT.get(token.text.lower(), token.text)
+            
+            # Get synonyms for long words
+            if len(token.text) > 8 and not token.like_num:
+                syns = nltk.corpus.wordnet.synsets(token.text)
+                if syns:
+                    simple_word = syns[0].lemmas()[0].name().replace('_', ' ')
+            
+            simplified.append(simple_word)
         
         # Stage 4: Sentence reconstruction
         text = " ".join(simplified)
-        text = re.sub(r'\s([?.!"](?:\s|$))', r'\1', text)  # Fix punctuation spacing
-        sentences = [sent.text for sent in nlp(text).sents]
+        text = re.sub(r'\s([?.!,](?:\s|$))', r'\1', text)
         
-        # Stage 5: Grammar normalization
-        final_output = ". ".join([
-            f"{sentence[0].upper()}{sentence[1:]}" if sentence else ""
-            for sentence in sentences
-        ])
+        # Stage 5: Final grammar check
+        final_output = tool.correct(text)
         
-        # Stage 6: Humanization
-        return add_natural_touches(final_output)
+        # Stage 6: Naturalization
+        return make_conversational(final_output)
     
     except Exception as e:
         return f"Error processing text: {str(e)}"
 
-def get_simple_word(token):
-    """Get context-appropriate simple words"""
-    if token.ent_type_ or token.is_punct:
-        return token.text
+def make_conversational(text):
+    """Add natural speaking patterns"""
+    # Convert to simple contractions
+    replacements = {
+        "do not": "don't",
+        "does not": "doesn't",
+        "is not": "isn't",
+        "cannot": "can't"
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
     
-    syns = wordnet.synsets(token.text)
-    if syns:
-        for lemma in syns[0].lemmas():
-            candidate = lemma.name().replace('_', ' ')
-            if len(candidate) <= len(token.text) + 2 and candidate.isalpha():
-                return candidate
-    return token.text
-
-def add_natural_touches(text):
-    """Add human-like elements to the text"""
-    # Add contractions
-    text = text.replace(" do not ", " don't ").replace(" does not ", " doesn't ")
+    # Add sentence variety
+    sentences = text.split('. ')
+    modified = []
+    for i, sent in enumerate(sentences):
+        if i % 2 == 0 and len(sent) > 0:
+            sent = f"Did you know? {sent[0].lower()}{sent[1:]}"
+        modified.append(sent)
     
-    # Add conversational phrases
-    starters = ["You know,", "Well,", "So,", "Actually,"]
-    if random.random() < 0.3:
-        text = f"{random.choice(starters)} {text[0].lower()}{text[1:]}"
-    
-    # Add occasional informal punctuation
-    if random.random() < 0.2:
-        text = text.replace(".", "...", 1)
-    
-    # Fix common word joins
-    text = re.sub(r'\b(a|an|the)\s+(\w)', lambda m: f"{m.group(1)} {m.group(2).lower()}", text)
-    
-    return text
+    return ". ".join(modified)
 
 # --- Streamlit Interface ---
-st.set_page_config(page_title="Kid-Friendly Text", page_icon="👧")
+st.set_page_config(page_title="Kid Text Expert", page_icon="👧")
 st.title("👧 Smart Text Simplifier")
 
-input_text = st.text_area("Enter your text:", height=150)
-if st.button("Simplify"):
+input_text = st.text_area("Enter your text:", height=150, 
+                         placeholder="Paste your text here...")
+
+if st.button("Simplify Text"):
     if input_text.strip():
-        with st.spinner("Making it kid-friendly..."):
+        with st.spinner("Creating kid-friendly version..."):
             output = simplify_text(input_text)
             st.subheader("Simple Version")
             st.write(output)
-            st.download_button("Download", output)
+            
+            # Show original comparison
+            with st.expander("See Original vs Simple"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Original**")
+                    st.write(input_text)
+                with col2:
+                    st.write("**Simple Version**")
+                    st.write(output)
     else:
         st.warning("Please enter some text first!")
+
+st.markdown("---")
+st.info("💡 Tip: Use short paragraphs (3-4 sentences) for best results!")
