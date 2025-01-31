@@ -5,7 +5,7 @@ import nltk
 from nltk.corpus import wordnet
 from textblob import TextBlob
 
-# --- Fix for spaCy/WordNet initialization ---
+# --- Initialization ---
 try:
     nlp = spacy.load("en_core_web_sm")
 except:
@@ -18,92 +18,108 @@ try:
 except:
     nltk.download('wordnet')
 
-# --- Custom Simple Word Dictionary ---
-SIMPLE_WORDS = {
+# --- Custom Simple Language Rules ---
+SIMPLIFY_DICT = {
     "technology": "tech stuff",
-    "generator": "maker",
-    "transformer": "smart tool",
-    "contextually": "in context",
-    "coherent": "clear",
-    "impact": "effect",
-    "society": "people",
-    "integral": "important",
-    "reshape": "change",
-    "revolutionary": "big",
-    "advent": "coming",
-    "instantaneously": "right away"
+    "generator": "tool",
+    "environment": "nature",
+    "utilize": "use",
+    "approximately": "about",
+    "communication": "talking",
+    "revolutionized": "changed completely",
+    "global community": "worldwide friends",
+    "digital addiction": "screen time problems"
 }
 
+CONVERSATIONAL_STARTERS = [
+    "You know what's cool?", "Here's something neat!", 
+    "Fun fact alert!", "Check this out!", 
+    "Did you hear about this?", "Guess what?"
+]
+
+EMOJIS = ["📱", "💡", "🌎", "✨", "🤓", "👧"]
+
 def simplify_text(text):
-    """Improved simplification with custom rules"""
-    # Step 1: Basic cleaning
-    doc = nlp(text)
+    """Enhanced simplification with grammar checks"""
+    # Stage 1: Grammar correction
+    text = TextBlob(text).correct()
     
-    # Step 2: Replace complex words
+    # Stage 2: Context-aware replacement
+    doc = nlp(text)
     simplified = []
     for token in doc:
-        if token.text.lower() in SIMPLE_WORDS:
-            simplified.append(SIMPLE_WORDS[token.text.lower()])
-        elif len(token.text) > 8 and not token.is_punct:  # Long words
-            simple = get_simple_synonym(token.text)
-            simplified.append(simple)
-        else:
-            simplified.append(token.text)
+        simple_word = SIMPLIFY_DICT.get(token.text.lower(), token.text)
+        simplified.append(simple_word if should_replace(token) else token.text)
     
-    # Step 3: Rebuild text with proper spacing
+    # Stage 3: Natural sentence reconstruction
     text = " ".join(simplified)
-    
-    # Step 4: Split long sentences
     sentences = [sent.text for sent in nlp(text).sents]
-    text = ". ".join([shorten(sent) for sent in sentences])
+    text = ". ".join([rebuild_sentence(sent) for sent in sentences])
     
-    # Step 5: Make kid-friendly
+    # Stage 4: Humanization
     return humanize_text(text)
 
-def get_simple_synonym(word):
-    """Get child-friendly synonyms with filtering"""
-    syns = wordnet.synsets(word)
-    if syns:
-        for lemma in syns[0].lemmas():
-            candidate = lemma.name().replace("_", " ")
-            if len(candidate) <= len(word) and " " not in candidate:
-                return candidate
-    return word
+def should_replace(token):
+    """Avoid replacing proper nouns and specific cases"""
+    return (
+        token.text.lower() in SIMPLIFY_DICT and
+        not token.ent_type_ and
+        token.pos_ not in ["PROPN", "PRON"]
+    )
 
-def shorten(sentence):
-    """Split long sentences naturally"""
-    if len(sentence.split()) > 12:
-        return ".\n".join(sentence.split(", "))
+def rebuild_sentence(sentence):
+    """Ensure grammatical structure"""
+    # Fix articles and basic grammar
+    sentence = sentence.replace(" a ", " a ").replace(" an ", " a ")
+    sentence = sentence.replace(" the ", " the ")
+    
+    # Capitalize first letter
+    if len(sentence) > 0:
+        sentence = sentence[0].upper() + sentence[1:]
+    
+    # Ensure sentence ends with punctuation
+    if not sentence.endswith((".", "!", "?")):
+        sentence += "."
+    
     return sentence
 
 def humanize_text(text):
-    """Make text conversational for kids"""
-    # Add questions and exclamations
+    """Add natural conversational elements"""
+    # Add conversational starters
     if random.random() < 0.4:
-        starters = ["Guess what?", "Did you know?", "Cool fact:", "Hey!"]
-        text = f"{random.choice(starters)} {text[0].lower()}{text[1:]}"
+        starter = random.choice(CONVERSATIONAL_STARTERS)
+        text = f"{starter} {text[0].lower()}{text[1:]}"
     
-    # Simplify punctuation
-    text = text.replace(" - ", " ").replace(";", ".")
+    # Add contractions
+    text = text.replace("do not", "don't").replace("is not", "isn't")
     
-    # Add emojis
-    emojis = ["📱", "💻", "🌍", "✨"]
+    # Add emojis and pauses
     if random.random() < 0.3:
-        text += f" {random.choice(emojis)}"
+        text = text.replace(".", f"{random.choice(EMOJIS)}.", 1)
+    if random.random() < 0.2:
+        text = text.replace(",", ", like,", 1)
+    
+    # Vary sentence lengths
+    sentences = text.split(". ")
+    if len(sentences) > 3:
+        text = ". ".join([s for i, s in enumerate(sentences) if i % 2 == 0])
     
     return text
 
-# --- Streamlit UI ---
-st.set_page_config(page_title="Kid-Friendly Text", page_icon="👧")
-st.title("👧 Make Text Easy for Kids!")
+# --- Streamlit Interface ---
+st.set_page_config(page_title="Kid-Friendly Text Maker", page_icon="👧")
+st.title("👧 Text Simplifier for Kids")
 
-input_text = st.text_area("Enter your text:", height=150)
-if st.button("Simplify"):
+input_text = st.text_area("Paste your text here:", height=150)
+if st.button("Make It Kid-Friendly!"):
     if input_text.strip():
-        with st.spinner("Making it kid-friendly..."):
+        with st.spinner("Cooking up a simple version..."):
             output = simplify_text(input_text)
-            st.subheader("Simple Version")
+            st.subheader("Easy-to-Read Version")
             st.write(output)
-            st.download_button("Download", output)
+            st.download_button("Save Text", output)
     else:
         st.warning("Please enter some text first!")
+
+st.markdown("---")
+st.info("💡 Tip: Use short paragraphs for best results!")
