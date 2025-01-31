@@ -4,6 +4,15 @@ from nltk.corpus import wordnet
 import random
 import openai
 import requests  # For QuillBot API
+import spacy
+
+# Add this before loading the model
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    from spacy.cli import download
+    download("en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm")
 
 # Initialize NLP
 nlp = spacy.load("en_core_web_sm")
