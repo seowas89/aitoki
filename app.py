@@ -1,12 +1,11 @@
 import streamlit as st
 import spacy
 from nltk.corpus import wordnet
+from transformers import pipeline
 import random
-import openai
-import requests  # For QuillBot API
-import spacy
+from textblob import TextBlob  # For simple text processing
 
-# Add this before loading the model
+# --- Free Alternative Setup ---
 try:
     nlp = spacy.load("en_core_web_sm")
 except OSError:
@@ -14,124 +13,87 @@ except OSError:
     download("en_core_web_sm")
     nlp = spacy.load("en_core_web_sm")
 
-# Initialize NLP
-nlp = spacy.load("en_core_web_sm")
-
-# --- App Config ---
-st.set_page_config(page_title="Kid-Friendly Text Simplifier", page_icon="🧒")
-st.title("🧒 Text Simplifier for Kids")
-st.markdown("""
-_Converts complex text into easy-to-read language for 9-year-olds!_
-""")
+# Load free summarization model
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 
 # --- Core Functions ---
 def simplify_text(text):
-    """Main processing pipeline"""
-    # Step 1: Preprocess
+    """Simplification pipeline using free resources"""
+    # Step 1: Basic preprocessing
     doc = nlp(text)
     
-    # Step 2: Rule-based simplification
-    simplified = []
-    for sent in doc.sents:
-        simplified_sent = replace_complex_words(sent.text)
-        simplified_sent = shorten_sentence(simplified_sent)
-        simplified.append(simplified_sent)
+    # Step 2: Replace complex words
+    simplified = [replace_with_simple(word.text) for word in doc]
+    text = " ".join(simplified)
     
-    # Step 3: LLM Enhancement
-    llm_output = call_llm_api(" ".join(simplified))
+    # Step 3: Split long sentences
+    text = ". ".join([shorten_sentence(sent.text) for sent in doc.sents])
     
-    # Step 4: Humanization
-    final_output = humanize_text(llm_output)
+    # Step 4: Summarize with BART model
+    simplified = summarizer(
+        text,
+        max_length=150,
+        min_length=30,
+        do_sample=False,
+        truncation=True
+    )[0]['summary_text']
     
-    # Step 5: Anti-AI processing
-    return anti_ai_detection(final_output)
+    # Step 5: Add human touches
+    return humanize_text(simplified)
 
-def replace_complex_words(sentence):
-    replacements = {
-        "utilize": "use", "approximately": "about", 
-        "terminate": "end", "acquire": "get",
-        "synthesize": "make", "consequently": "so"
+def replace_with_simple(word):
+    """Use NLTK WordNet for synonym replacement"""
+    simple_words = {
+        "utilize": "use",
+        "commence": "start",
+        "terminate": "end",
+        "approximately": "about"
     }
-    for word, replacement in replacements.items():
-        sentence = sentence.replace(word, replacement)
-    return sentence
+    
+    # Check custom dictionary first
+    if word.lower() in simple_words:
+        return simple_words[word.lower()]
+    
+    # Fallback to NLTK synonyms
+    syns = wordnet.synsets(word)
+    if syns:
+        return syns[0].lemmas()[0].name()
+    return word
 
 def shorten_sentence(sentence):
+    """Basic sentence splitting"""
     if len(sentence.split()) > 15:
-        return ". ".join([s.strip() for s in sentence.split(", ")])
+        return ". ".join(sentence.split(", "))
     return sentence
 
 def humanize_text(text):
-    # Add conversational elements
-    human_touches = ["Wow, ", "You know, ", "Hey! ", "Cool! "]
+    """Add conversational elements without external APIs"""
+    # Add questions randomly
     if random.random() < 0.3:
-        text = random.choice(human_touches) + text.lower()
+        text = f"Did you know? {text[0].lower()}{text[1:]}"
     
-    # Add emojis
-    emojis = ["🌞", "✨", "🚀", "🎉", "🤯"]
+    # Add exclamations
+    exclamations = ["Cool!", "Wow!", "Awesome!"]
     if random.random() < 0.2:
-        text = text + " " + random.choice(emojis)
+        text = f"{random.choice(exclamations)} {text}"
+    
+    # Simple grammar mistakes
+    if random.random() < 0.1:
+        text = text.replace(" and ", " & ")
     
     return text
 
-def anti_ai_detection(text):
-    # Simple paraphrasing
-    try:
-        return quillbot_paraphrase(text)
-    except:
-        return text  # Fallback
+# --- Streamlit UI ---
+st.set_page_config(page_title="Free Text Simplifier", page_icon="👧")
+st.title("👧 Free Text Simplifier for Kids")
 
-def quillbot_paraphrase(text):
-    # Requires QuillBot API key
-    response = requests.post(
-        "https://api.quillbot.com/v1/paraphrase",
-        headers={"Authorization": f"Bearer {st.secrets['QUILLBOT_KEY']}"},
-        json={"text": text, "strength": 3}
-    )
-    return response.json()['data']['paraphrased']
-
-def call_llm_api(text):
-    openai.api_key = st.secrets["OPENAI_KEY"]
-    response = openai.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{
-            "role": "system",
-            "content": """Rewrite this for a 9-year-old. Rules:
-            - 3rd grade vocabulary
-            - Max 12-word sentences
-            - Use jokes/questions
-            - Sound like a fun aunt/uncle"""
-        }, {
-            "role": "user",
-            "content": text
-        }]
-    )
-    return response.choices[0].message.content
-
-# --- UI Components ---
-input_text = st.text_area("Paste your complex text here:", height=150)
-col1, col2 = st.columns([1, 3])
-with col1:
-    if st.button("✨ Simplify!"):
+input_text = st.text_area("Enter your text:", height=150)
+if st.button("Simplify!"):
+    if input_text:
         with st.spinner("Making it kid-friendly..."):
-            try:
-                output = simplify_text(input_text)
-                st.session_state.output = output
-            except Exception as e:
-                st.error(f"Oops! Error: {str(e)}")
-
-with col2:
-    if st.button("🔄 Reset"):
-        st.session_state.output = ""
-        input_text = ""
-
-if 'output' in st.session_state:
-    st.subheader("Simplified Text")
-    st.write(st.session_state.output)
-    st.download_button("📥 Download", st.session_state.output)
-
-# --- Optional Sidebar ---
-with st.sidebar:
-    st.markdown("## Settings ⚙️")
-    emoji_level = st.slider("🎉 Fun Level", 1, 5, 3)
-    complexity = st.selectbox("Reading Level", ["Grade 3", "Grade 4"])
+            result = simplify_text(input_text)
+            st.subheader("Simplified Text")
+            st.write(result)
+            st.download_button("Download", result)
+    else:
+        st.warning("Please enter some text!")
