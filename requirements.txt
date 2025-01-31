@@ -2,6 +2,7 @@ streamlit==1.32.0
 spacy==3.7.4
 nltk==3.8.1
 textblob==0.17.1
-language-tool-python==2.7
+textstat==0.7.2
+transformers==4.38.2
+torch==2.2.1
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl
-regex==2023.12.25
